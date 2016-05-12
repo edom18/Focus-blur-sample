@@ -72,41 +72,56 @@
 
 
     //////////////////////////////////////////////////
-    // サブシーン
+    // スクリーン
 
     // レンダーターゲット
     var width  = window.innerWidth;
     var height = window.innerHeight;
 
-    var renderTarget = new THREE.WebGLRenderTarget(width, height, {
-        magFilter: THREE.NearestFilter,
-        minFilter: THREE.NearestFilter,
-        wrapS: THREE.ClampToEdgeWrapping,
-        wrapT: THREE.ClampToEdgeWrapping
-    });
-
-    var screenScene = new THREE.Scene();
-
+    // スクリーンカメラ
     var screenCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
 
-    var screenGeo = new THREE.PlaneGeometry(1, 1);
-    var uniforms = {
-        texture: { type: 't', value: renderTarget },
-        renderSize: { type: 'v2', value: new THREE.Vector2(width, height) },
-        blur: { type: 'f', value: 0 }
-    };
+    // Blur
+    {
+        var blurTarget = new THREE.WebGLRenderTarget(width, height, {
+            magFilter: THREE.NearestFilter,
+            minFilter: THREE.NearestFilter,
+            wrapS: THREE.ClampToEdgeWrapping,
+            wrapT: THREE.ClampToEdgeWrapping
+        });
+    }
 
-    var screenMat = new THREE.ShaderMaterial({
-        uniforms: uniforms,
-        vertexShader: BLUR_VS,
-        fragmentShader: BLUR_FS
-    });
+    // Screen
+    {
+        var renderTarget = new THREE.WebGLRenderTarget(width, height, {
+            magFilter: THREE.NearestFilter,
+            minFilter: THREE.NearestFilter,
+            wrapS: THREE.ClampToEdgeWrapping,
+            wrapT: THREE.ClampToEdgeWrapping
+        });
 
-    var screen = new THREE.Mesh(screenGeo, screenMat);
-    screen.position.z = -1;
 
-    screenScene.add(screenCamera);
-    screenScene.add(screen);
+        var screenScene = new THREE.Scene();
+
+        var screenGeo = new THREE.PlaneGeometry(2, 2);
+        var uniforms = {
+            texture: { type: 't', value: renderTarget },
+            renderSize: { type: 'v2', value: new THREE.Vector2(width, height) },
+            blur: { type: 'f', value: 0.5 }
+        };
+
+        var screenMat = new THREE.ShaderMaterial({
+            uniforms: uniforms,
+            vertexShader: BLUR_VS,
+            fragmentShader: BLUR_FS
+        });
+
+        var screen = new THREE.Mesh(screenGeo, screenMat);
+        screen.position.z = -1;
+
+        screenScene.add(screenCamera);
+        screenScene.add(screen);
+    }
 
     //////////////////////////////////////////////////
 
@@ -203,8 +218,8 @@
 
     // アニメーションループ
     function animate(timestamp) {
-        // renderer.render(scene, subCamera, renderTarget);
-        renderer.render(scene, camera);
+        renderer.render(scene, camera, renderTarget);
+        renderer.render(screenScene, screenCamera);
 
         // アニメーションループ
         requestAnimationFrame(animate);
