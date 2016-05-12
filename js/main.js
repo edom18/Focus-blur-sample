@@ -32,6 +32,7 @@
         uniform sampler2D texture;
         uniform vec2 renderSize;
         uniform float blur;
+        uniform int useBlur;
 
         varying vec2 vUV;
 
@@ -44,6 +45,10 @@
 
             float maxLevel = float((blurPixel - 1) / 2);
             float total = 0.0;
+
+            if (useBlur == 0) {
+                return texture2D(texture, vUV);
+            }
 
             for (int y = 0; y < blurH; y++) {
                 for (int x = 0; x < blurW; x++) {
@@ -131,7 +136,8 @@
         var blurUniforms = {
             texture: { type: 't', value: renderTarget },
             renderSize: { type: 'v2', value: new THREE.Vector2(width, height) },
-            blur: { type: 'f', value: 0.5 }
+            blur: { type: 'f', value: 0.5 },
+            useBlur: { type: 'i', value: 0 }
         };
 
         var blurMat = new THREE.ShaderMaterial({
@@ -282,6 +288,12 @@
         rightWall.visible = false;
         floor && (floor.visible = false);
     }
+
+    var useBlur = false;
+    var btn = document.getElementById('btn').addEventListener('click', function () {
+        useBlur = !useBlur;
+        blurScreen.material.uniforms.useBlur.value = useBlur ? 1 : 0;
+    }, false);
 
     // アニメーションループ
     function animate(timestamp) {
