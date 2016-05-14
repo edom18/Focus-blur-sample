@@ -12,11 +12,18 @@
 
     var FS = `
         uniform sampler2D texture;
-        uniform sampler2D focusTexture;
+        uniform sampler2D blurTexture;
+        uniform sampler2D maskTexture;
         varying vec2 vUV;
 
         void main() {
-            gl_FragColor = texture2D(texture, vUV) + texture2D(focusTexture, vUV);
+            float mask = texture2D(maskTexture, vUV).r;
+            if (mask > 0.0) {
+                gl_FragColor = texture2D(texture, vUV);
+            }
+            else {
+                gl_FragColor = texture2D(blurTexture, vUV);
+            }
         }
     `;
 
@@ -78,12 +85,45 @@
 
     //////////////////////////////////////////////////
 
+    var shareDepth = function () {
+        var scene = new THREE.Scene();
+        var camera = new THREE.Camera();
+
+        return function (renderer, renderTarget, renderTargetFrom) {
+            // to force setup RT1, not for rendering.
+            renderer.render(scene, camera, renderTargetFrom);
+
+            // to force setup RT2, not for rendering.
+            renderer.render(scene, camera, renderTarget);
+
+            var _gl = renderer.context;
+            var framebuffer = renderer.properties.get(renderTarget).__webglFramebuffer;
+            var renderbufferShareFrom = renderer.properties.get(renderTargetFrom).__webglDepthbuffer;
+            _gl.bindFramebuffer(_gl.FRAMEBUFFER, framebuffer);
+            _gl.bindRenderbuffer(_gl.RENDERBUFFER, renderbufferShareFrom);
+
+            _gl.framebufferRenderbuffer(
+                _gl.FRAMEBUFFER, 
+                _gl.DEPTH_ATTACHMENT,
+                _gl.RENDERBUFFER,
+                renderbufferShareFrom
+            );
+
+            _gl.bindFramebuffer(_gl.FRAMEBUFFER, null);
+            _gl.bindRenderbuffer(_gl.RENDERBUFFER, null);
+        };
+    }();
+
+
+    //////////////////////////////////////////////////
+
 
     // レンダラを生成
     var renderer = new THREE.WebGLRenderer({antialias: true});
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
+    renderer.autoClear = false;
 
     window.addEventListener('resize', function () {
         camera.aspect = window.innerWidth / window.innerHeight;
@@ -118,15 +158,19 @@
         magFilter: THREE.NearestFilter,
         minFilter: THREE.NearestFilter,
         wrapS: THREE.ClampToEdgeWrapping,
-        wrapT: THREE.ClampToEdgeWrapping
+        wrapT: THREE.ClampToEdgeWrapping,
+        depthBuffer: true,
+        stencilBuffer: false
     });
 
-    // ターゲット用
-    var focusRenderTarget = new THREE.WebGLRenderTarget(width, height, {
+    // マスク用
+    var maskTarget = new THREE.WebGLRenderTarget(width, height, {
         magFilter: THREE.NearestFilter,
         minFilter: THREE.NearestFilter,
         wrapS: THREE.ClampToEdgeWrapping,
-        wrapT: THREE.ClampToEdgeWrapping
+        wrapT: THREE.ClampToEdgeWrapping,
+        depthBuffer: true,
+        stencilBuffer: false
     });
 
     // Blur
@@ -159,15 +203,17 @@
         var screenScene = new THREE.Scene();
 
         var screenUniforms = {
-            texture: { type: 't', value: blurRenderTarget },
-            focusTexture: { type: 't', value: focusRenderTarget },
+            texture: { type: 't', value: renderTarget },
+            blurTexture: { type: 't', value: blurRenderTarget },
+            maskTexture: { type: 't', value: maskTarget },
             renderSize: { type: 'v2', value: new THREE.Vector2(width, height) }
         };
 
         var screenMat = new THREE.ShaderMaterial({
             uniforms: screenUniforms,
             vertexShader: VS,
-            fragmentShader: FS
+            fragmentShader: FS,
+            depthWrite: false
         })
 
         var screen = new THREE.Mesh(screenGeo, screenMat);
@@ -295,18 +341,34 @@
         blurScreen.material.uniforms.useBlur.value = useBlur ? 1 : 0;
     }, false);
 
+    var maskMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        depthWrite: false,
+        fog: false
+    });
+
+    shareDepth(renderer, maskTarget, renderTarget);
+
     // アニメーションループ
     function animate(timestamp) {
+
+        renderer.clear( true, true, true );
+        renderer.clearTarget( renderTarget, true, true, true );
+        renderer.clearTarget( maskTarget, true, true, true );
+        renderer.clearTarget( blurRenderTarget, true, true, true );
+
         // バックバッファへ通常シーンのレンダリング
         renderer.render(scene, camera, renderTarget);
 
+        // ターゲットだけレンダリング
+        scene.overrideMaterial = maskMaterial;
+        hide();
+        renderer.render(scene, camera, maskTarget);
+        show();
+        scene.overrideMaterial = null;
+
         // ブラー
         renderer.render(blurScene, screenCamera, blurRenderTarget);
-
-        // ターゲットだけレンダリング
-        hide();
-        renderer.render(scene, camera, focusRenderTarget);
-        show();
 
         // 描画
         renderer.render(screenScene, screenCamera);
