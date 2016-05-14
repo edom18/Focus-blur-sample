@@ -2,7 +2,7 @@
 
     'use strict';
 
-    var VS = `
+    var VERTEX_SHADER = `
         varying vec2 vUV;
         void main() {
             vUV = uv;
@@ -10,7 +10,7 @@
         }
     `;
 
-    var FS = `
+    var FRAGMENT_SHADER = `
         uniform sampler2D texture;
         uniform sampler2D blurTexture;
         uniform sampler2D maskTexture;
@@ -27,7 +27,7 @@
         }
     `;
 
-    var BLUR_VS = `
+    var BLUR_VERTEX_SHADER = `
         varying vec2 vUV;
         void main() {
             vUV = uv;
@@ -35,7 +35,7 @@
         }
     `;
 
-    var BLUR_FS = `
+    var BLUR_FRAGMENT_SHADER = `
         uniform sampler2D texture;
         uniform vec2 renderSize;
         uniform float blur;
@@ -159,7 +159,7 @@
         minFilter: THREE.NearestFilter,
         wrapS: THREE.ClampToEdgeWrapping,
         wrapT: THREE.ClampToEdgeWrapping,
-        depthBuffer: true,
+        depthBuffer  : true,
         stencilBuffer: false
     });
 
@@ -169,7 +169,7 @@
         minFilter: THREE.NearestFilter,
         wrapS: THREE.ClampToEdgeWrapping,
         wrapT: THREE.ClampToEdgeWrapping,
-        depthBuffer: true,
+        depthBuffer  : true,
         stencilBuffer: false
     });
 
@@ -178,16 +178,16 @@
         var blurScene = new THREE.Scene();
 
         var blurUniforms = {
-            texture: { type: 't', value: renderTarget },
+            texture   : { type: 't',  value: renderTarget },
             renderSize: { type: 'v2', value: new THREE.Vector2(width, height) },
-            blur: { type: 'f', value: 0.5 },
-            useBlur: { type: 'i', value: 0 }
+            blur      : { type: 'f',  value: 0.5 },
+            useBlur   : { type: 'i',  value: 0 }
         };
 
         var blurMat = new THREE.ShaderMaterial({
             uniforms: blurUniforms,
-            vertexShader: BLUR_VS,
-            fragmentShader: BLUR_FS
+            vertexShader: BLUR_VERTEX_SHADER,
+            fragmentShader: BLUR_FRAGMENT_SHADER
         });
 
         var blurScreen = new THREE.Mesh(screenGeo, blurMat);
@@ -203,17 +203,16 @@
         var screenScene = new THREE.Scene();
 
         var screenUniforms = {
-            texture: { type: 't', value: renderTarget },
+            texture    : { type: 't', value: renderTarget },
             blurTexture: { type: 't', value: blurRenderTarget },
-            maskTexture: { type: 't', value: maskTarget },
-            renderSize: { type: 'v2', value: new THREE.Vector2(width, height) }
+            maskTexture: { type: 't', value: maskTarget }
         };
 
         var screenMat = new THREE.ShaderMaterial({
-            uniforms: screenUniforms,
-            vertexShader: VS,
-            fragmentShader: FS,
-            depthWrite: false
+            uniforms      : screenUniforms,
+            vertexShader  : VERTEX_SHADER,
+            fragmentShader: FRAGMENT_SHADER,
+            depthWrite    : false
         })
 
         var screen = new THREE.Mesh(screenGeo, screenMat);
@@ -242,10 +241,11 @@
     // 各種オブジェクトのセットアップ
 
     var bed, table, floor;
+    var loader        = new THREE.JSONLoader();
+    var textureLoader = new THREE.TextureLoader();
 
     // ベッド
-    var bedLoader = new THREE.JSONLoader();
-    bedLoader.load('models/bed.json', function (geometry, materials) {
+    loader.load('models/bed.json', function (geometry, materials) {
         var material = new THREE.MeshFaceMaterial(materials);
         bed = new THREE.Mesh(geometry, material);
         var s = 0.5;
@@ -256,8 +256,8 @@
         scene.add(bed);
     });
 
-    var tableLoader = new THREE.JSONLoader();
-    tableLoader.load('models/table.json', function (geometry, materials) {
+    // テーブル
+    loader.load('models/table.json', function (geometry, materials) {
         var material = new THREE.MeshFaceMaterial(materials);
         table = new THREE.Mesh(geometry, material);
         var s = 0.25;
@@ -279,8 +279,8 @@
     scene.add(ambient);
 
 
-    var floorTextureLoader = new THREE.TextureLoader();
-    floorTextureLoader.load('models/Sapele Mahogany.jpg', function (texture) {
+    // 床
+    textureLoader.load('models/Sapele Mahogany.jpg', function (texture) {
         texture.repeat.set(4, 4);
 
         var planeGeo = new THREE.PlaneGeometry(5, 5);
@@ -321,18 +321,20 @@
 
     function show() {
         table && (table.visible = true);
+        floor && (floor.visible = true);
+
         wall.visible      = true;
         leftWall.visible  = true;
         rightWall.visible = true;
-        floor && (floor.visible = true);
     }
 
     function hide() {
         table && (table.visible = false);
+        floor && (floor.visible = false);
+
         wall.visible      = false;
         leftWall.visible  = false;
         rightWall.visible = false;
-        floor && (floor.visible = false);
     }
 
     var useBlur = false;
@@ -341,12 +343,14 @@
         blurScreen.material.uniforms.useBlur.value = useBlur ? 1 : 0;
     }, false);
 
+    // マスク用マテリアル
     var maskMaterial = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         depthWrite: false,
         fog: false
     });
 
+    // Share depth buffer.
     shareDepth(renderer, maskTarget, renderTarget);
 
     // アニメーションループ
@@ -360,7 +364,7 @@
         // バックバッファへ通常シーンのレンダリング
         renderer.render(scene, camera, renderTarget);
 
-        // ターゲットだけレンダリング
+        // マスク用データを収集
         scene.overrideMaterial = maskMaterial;
         hide();
         renderer.render(scene, camera, maskTarget);
